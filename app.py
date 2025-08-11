@@ -1,4 +1,3 @@
-
 import streamlit as st
 import joblib
 import numpy as np
@@ -196,7 +195,8 @@ if st.button("Predict (Manual)"):
 # ---------------------------
 st.markdown("---")
 st.header("Option 2: Paste natural language prompt")
-st.caption("Example: I'm a 30-year-old male. BMI is 25. HbA1c is 5.2. Fasting glucose 92 mg/dL. No hypertension or heart disease. Non-smoker.")
+st.caption("""Example: "I'm a 30-year-old male. BMI is 25. HbA1c is 5.2. 
+Fasting glucose 92 mg/dL. No hypertension or heart disease. Non-smoker.""")
 
 prompt = st.text_area("Enter description")
 
@@ -215,7 +215,8 @@ if st.button("Predict (Natural Language)"):
         if a1c_n is None: missing.append("HbA1c")
         if glu_n is None: missing.append("Glucose")
         if missing:
-            raise ValueError(f"Missing or unparsable fields: {', '.join(missing)}. Try formats like 'Age: 30; BMI: 25; HbA1c: 5.2; Glucose: 92'.")
+            raise ValueError(f"Missing or unparsable fields: {', '.join(missing)}. "
+                             f"Try formats like 'Age: 30; BMI: 25; HbA1c: 5.2; Glucose: 92'.")
 
         g_f, g_m, g_o = parse_gender(prompt_clean)
         htn, hd = safe_flags(prompt_clean)
