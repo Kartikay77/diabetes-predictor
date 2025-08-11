@@ -15,23 +15,18 @@ NUM = r"[0-9]+(?:\.[0-9]+)?"
 
 def clean_text(text: str) -> str:
     t = text.strip()
-    # Normalize whitespace
-    t = re.sub(r"\s+", " ", t)
-    # Remove thousand separators in numbers (e.g., 1,234.5 -> 1234.5)
-    t = re.sub(r"(?<=\d),(?=\d)", "", t)
-    # Remove punctuation immediately following numbers (e.g., 5.2. -> 5.2)
-    t = re.sub(rf"({NUM})[^\d\s]", r"\1", t)
+    t = re.sub(r"\s+", " ", t)  # Normalize whitespace
+    t = re.sub(r"(?<=\d),(?=\d)", "", t)  # Remove thousand separators
+    t = re.sub(rf"({NUM})[^\d\s]", r"\1", t)  # Remove punctuation after numbers
     return t
 
 def find_number(text: str, patterns: list[str]) -> Optional[float]:
-    """Try multiple regex patterns and return the first matched float."""
     for pat in patterns:
         m = re.search(pat, text, flags=re.IGNORECASE)
         if m:
             try:
                 return float(m.group(1))
             except ValueError:
-                # Try stripping non-numeric trailing chars just in case
                 raw = re.sub(r"[^\d.]+$", "", m.group(1))
                 return float(raw)
     return None
@@ -42,6 +37,7 @@ def parse_age(text: str) -> Optional[int]:
         rf"\bAge\s*[:=]\s*({NUM})\b",
         rf"\bI\s*am\s*({NUM})\s*(?:years?|yrs?)\s*old\b",
         rf"\b({NUM})\s*(?:years?|yrs?)\s*old\b",
+        rf"\b({NUM})\s*yo\b"
     ]
     val = find_number(text, pats)
     return int(val) if val is not None else None
@@ -71,25 +67,20 @@ def parse_glucose(text: str) -> Optional[float]:
 
 def parse_gender(text: str) -> tuple[int, int, int]:
     t = text.lower()
-    female = int("female" in t or "woman" in t or "f" in re.findall(r"\bsex\s*[:=]\s*([mf])\b", t))
-    male   = int("male" in t or "man" in t or "m" in re.findall(r"\bsex\s*[:=]\s*([mf])\b", t))
-    # Ensure one-hot validity
-    if female and not male:
+    is_female = bool(re.search(r"\bfemale\b|\bwoman\b", t)) or bool(re.search(r"\bsex\s*[:=]\s*f\b", t))
+    is_male   = bool(re.search(r"\bmale\b|\bman\b", t))    or bool(re.search(r"\bsex\s*[:=]\s*m\b", t))
+    if is_female and not is_male:
         return 1, 0, 0
-    if male and not female:
+    if is_male and not is_female:
         return 0, 1, 0
-    # If unclear, mark as other
-    return 0, 0, 1
+    return 0, 0, 1  # unclear -> other
 
 def parse_yes_no_flag(text: str, key_word: str) -> Optional[int]:
-    """Return 1 if condition present, 0 if explicitly negated, None if unknown."""
     t = text.lower()
-    # explicit negations
     if re.search(rf"\b(no|without|denies)\s+{key_word}\b", t):
         return 0
     if re.search(rf"\b{key_word}\s*[:=]\s*(0|no)\b", t):
         return 0
-    # explicit affirmations
     if re.search(rf"\b{key_word}\b", t):
         if not re.search(rf"\bno\s+{key_word}\b", t):
             return 1
@@ -108,13 +99,11 @@ SMOKING_CANON = {
 
 def parse_smoking(text: str) -> list[int]:
     t = text.lower()
-    # Key=value form
     m = re.search(r"\bsmok(?:e|ing|er)\s*(?:history)?\s*[:=]\s*([a-zA-Z ]+)\b", t)
     label = None
     if m:
         label = m.group(1).strip()
     else:
-        # heuristic match by keywords
         for canon, synonyms in SMOKING_CANON.items():
             for s in synonyms:
                 if s in t:
@@ -122,14 +111,11 @@ def parse_smoking(text: str) -> list[int]:
                     break
             if label:
                 break
-    # one-hot order: never, former, current, no info, not current, ever
     opts = ["never", "former", "current", "no info", "not current", "ever"]
     if label and label in opts:
         return [int(opt == label) for opt in opts]
-    # Fallbacks: if we see explicit “non-smoker”
     if re.search(r"\b(non[-\s]?smoker|does not smoke|never smoked)\b", t):
         return [1, 0, 0, 0, 0, 0]
-    # Unknown
     return [0, 0, 0, 1, 0, 0]
 
 def build_df(age, bmi, hba1c, glucose, hypertension, heart_disease,
@@ -153,7 +139,6 @@ def build_df(age, bmi, hba1c, glucose, hypertension, heart_disease,
     return pd.DataFrame(row, columns=columns)
 
 def safe_flags(text: str):
-    # Default to 0 unless explicitly stated
     htn = parse_yes_no_flag(text, "hypertension")
     hd  = parse_yes_no_flag(text, "heart disease")
     return (0 if htn is None else htn, 0 if hd is None else hd)
@@ -161,7 +146,6 @@ def safe_flags(text: str):
 # ---------------------------
 # Load model
 # ---------------------------
-# Put your model file in the same directory as app.py, or adjust the path.
 model = joblib.load("xgboost_diabetes_model.pkl")
 
 st.title("Diabetes Prediction System")
@@ -208,15 +192,14 @@ if st.button("Predict (Manual)"):
 # ---------------------------
 st.markdown("---")
 st.header("Option 2: Paste natural language prompt")
+st.caption("Example: \"I'm a 30-year-old male. BMI is 25. HbA1c is 5.2. Fasting glucose 92 mg/dL. No hypertension or heart disease. Non-smoker.\"")
 
-st.caption("Examples: \"I'm a 30-year-old male. BMI is 25. HbA1c is 5.2. Fasting glucose 92 mg/dL. No hypertension or heart disease. Non-smoker.\"")
 prompt = st.text_area("Enter description")
 
 if st.button("Predict (Natural Language)"):
     try:
         prompt_clean = clean_text(prompt)
 
-        # Parse numeric fields
         age_n   = parse_age(prompt_clean)
         bmi_n   = parse_bmi(prompt_clean)
         a1c_n   = parse_hba1c(prompt_clean)
@@ -231,7 +214,6 @@ if st.button("Predict (Natural Language)"):
             raise ValueError(f"Missing or unparsable fields: {', '.join(missing)}. "
                              f"Try formats like 'Age: 30; BMI: 25; HbA1c: 5.2; Glucose: 92'.")
 
-        # Categorical/flags
         g_f, g_m, g_o = parse_gender(prompt_clean)
         htn, hd = safe_flags(prompt_clean)
         smoke_vec = parse_smoking(prompt_clean)
