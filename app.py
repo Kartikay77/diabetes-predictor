@@ -196,7 +196,10 @@ if st.button("Predict (Manual)"):
 # ---------------------------
 st.markdown("---")
 st.header("Option 2: Paste natural language prompt")
-st.caption("Example: \"I'm a 30-year-old male. BMI is 25. HbA1c is 5.2. Fasting glucose 92 mg/dL. No hypertension or heart disease. Non-smoker.\")
+st.caption("""Example: "I'm a 30-year-old male. BMI is 25. HbA1c is 5.2. 
+Fasting glucose 92 mg/dL. No hypertension or heart disease. Non-smoker.""")
+
+
 
 prompt = st.text_area("Enter description")
 
